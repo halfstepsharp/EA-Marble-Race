@@ -50,14 +50,7 @@ lcdfp_running = True
 Stopwatch_running = True
 start3thread = False
 
-#TODO: link buttons, servo, LEDs to GPIO pins
-'''
-3 pins for 3 RGB LEDs
-2 pins for I2C LCD
-3 target board servos
-3 gate servos
-3 target boards
-'''
+#initializing pins
 servo1 = PWM(Pin(1))
 servo2 = PWM(Pin(2))
 servo3 = PWM(Pin(3))
@@ -88,10 +81,7 @@ gate1servo.freq(50)
 gate2servo.freq(50)
 gate3servo.freq(50)
 
-# Create a button input on pin X
-#button = machine.Pin(X, machine.Pin.IN, machine.Pin.PULL_UP)
-
-#I2C, LCD
+#I2C LCD
 i2c = I2C(1, sda=Pin(14), scl=Pin(15), freq=400000) #I2C pins 14 &15
 I2C_ADDR = i2c.scan()[0]
 lcd = I2cLcd(i2c, I2C_ADDR, 2, 16) #LCD
@@ -117,6 +107,7 @@ def readtimings():
     hsdata_int = int(hsdata.replace(':',''))
     print("ltdata_int is " + str(ltdata_int) + ", hsdata_int is " + str(hsdata_int))
     
+#functions for setting LED color
 def ledr(val):
     brightness = int(65536*val)
     ledRed.duty_u16(brightness)
@@ -153,25 +144,25 @@ def rgbBlack():
     ledr(0)
     ledb(0)
     ledg(0)
-
+#random LED color
 def rgbRand():
     ledr(random.random())
     ledb(random.random())
     ledg(random.random())
-    
+#random angle for servos
 def randangle():
     global MIN
     global MAX
     i = int(MIN + (MAX - MIN) * random.random())
     print("randangle = " + str(i))
     return i
-   
+#landing screen thread
 def lcdfrontpageThread():
     global resetflag
     slptime = 2
     i = 0
     while lcdfp_running:
-        lcd.clear()
+        lcd.clear() #clearing and setting I2C LCD display
         lcd.putstr("LapTime=  "+str(ltdata)+"\n")
         lcd.putstr("HighScore=" + str(hsdata))
         rgbRand()
@@ -182,6 +173,7 @@ def lcdfrontpageThread():
         rgbRand()
         sleep(slptime)
         i+=1
+        #hold red button to reset
         if (stopbutton.value() == 0):
             if (resetflag == True):
                 stopbreset.init(period=10000, mode=machine.Timer.ONE_SHOT, callback=resethscallback)
@@ -200,7 +192,7 @@ def lcdfrontpageThread():
     print("closing thread")
     gc.collect()
     _thread.exit()
-    
+#timer for LCD display and setting random angle on servos
 def rand3servostimerThread():
     print("target board thread running")
     gc.collect()
@@ -254,6 +246,7 @@ def rand3servostimerThread():
         hs = open("hs.txt", "w")
         hs.write("{}{}:{}{}".format(m10, m1, s10, s1))
         hs.close()
+    #closing thread
     stopwatcht.deinit()
     gc.collect()
     _thread.exit()
@@ -261,7 +254,7 @@ def rand3servostimerThread():
 def StpWatchIncrement(self): 
     global s1
     s1 += 1
-
+#resetting highscore
 def resethscallback(self):
     global resetflag
     print("reset callback running")
@@ -276,7 +269,7 @@ def resethscallback(self):
     else:
         print("reset unsuccessful")
     resetflag = True
-    
+#reenabling servos
 def servo1onCallback(self):
     gate1servo.duty_ns(MIN)
     global servo1run, flag1
@@ -285,7 +278,6 @@ def servo1onCallback(self):
     servo1on.deinit()
     
 def servo2onCallback(self):
-    print("servo2timer donez")
     gate2servo.duty_ns(MIN)
     global servo2run, flag2
     servo2run = True
@@ -298,13 +290,12 @@ def servo3onCallback(self):
     servo3run = True
     flag3 = True
     servo3on.deinit()
-    
+#stop conveyor
 def cbeltCallback(self):
     global motordriverCW, motordriverCCW
     motordriverCW.value(0)
     motordriverCCW.value(0)
-
-
+#interrupts for 
 def tgt_irq1(pin):
     global servo1run, flag1
     if not servo1run:
@@ -405,17 +396,9 @@ while True:
     #CarPosition to end
     #lap time to 0
     rgbRed()
-    '''while (conveyorBeltPosition != "top"):
-        #conveyor motor output = 1
-        rgbYellow()'''
         
     #Start game once conveyor belt is at top
-    '''rgbGreen()
-    sleep(3)
-    while (IRmodule1.value() == 0):
-        pass
-        if (IRmodule1.value() == 1):
-            break'''
+    
     print("clearing memory")
     gc.collect()
     print("Free memory: ", gc.mem_free(), "bytes")
