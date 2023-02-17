@@ -26,6 +26,9 @@ flag2 = True
 flag3 = True
 resetflag = True
 IR1flag = True
+tflag1 = True
+tflag2 = True
+tflag3 = True #flag true means tgate can be changed
 
 stopwatcht = Timer()
 servo1on = Timer()
@@ -33,6 +36,9 @@ servo2on = Timer()
 servo3on = Timer()
 cbeltTimer = Timer()
 stopbreset = Timer()
+tgt1 = Timer()
+tgt2 = Timer()
+tgt3 = Timer()
 
 s1 = 0
 s10 = 0
@@ -40,33 +46,40 @@ m1 = 0
 m10 = 0
 
 #servo duty values
-MIN = 2500000
-MAX = 250000
+MIN = 2000000
+MAX = 1000000
 MID = int(MAX+((MIN-MAX)/2))
 gMIN = 700000
-gMID = int(MAX+((gMIN-MAX)/2))
+gMID = int(MIN+((gMIN-MAX)/2))
 
 lcdfp_running = True
 Stopwatch_running = True
 start3thread = False
 
-#initializing pins
-servo1 = PWM(Pin(1))
+#TODO: link buttons, servo, LEDs to GPIO pins
+'''
+3 pins for 3 RGB LEDs
+2 pins for I2C LCD
+3 target board servos
+3 gate servos
+3 target boards
+'''
+servo1 = PWM(Pin(3))
 servo2 = PWM(Pin(2))
-servo3 = PWM(Pin(3))
+servo3 = PWM(Pin(1))
 gate1servo = PWM(Pin(4))
 gate2servo = PWM(Pin(5))
 gate3servo = PWM(Pin(6))
-tgtboard1 = Pin(7, Pin.IN, Pin.PULL_DOWN)		#active low
+tgtboard1 = Pin(9, Pin.IN, Pin.PULL_DOWN)		#active low
 tgtboard2 = Pin(8, Pin.IN, Pin.PULL_DOWN)		#active low
-tgtboard3 = Pin(9, Pin.IN, Pin.PULL_DOWN)		#active low
+tgtboard3 = Pin(7, Pin.IN, Pin.PULL_DOWN)		#active low
 motordriverCW = Pin(10,Pin.OUT)
 motordriverCCW = Pin(11,Pin.OUT)
 startbutton = Pin(17, Pin.IN, Pin.PULL_UP) 		#active low
 stopbutton 	= Pin(16, Pin.IN, Pin.PULL_UP) 		#active low
 lswitch1 	= Pin(20, Pin.IN, Pin.PULL_DOWN)	#active low
-IRmodule1 	= Pin(22, Pin.IN, Pin.PULL_UP)		#active low
-IRmodule2 	= Pin(21, Pin.IN, Pin.PULL_UP)		#active low
+IRmodule1 	= Pin(22, Pin.IN, Pin.PULL_DOWN)		#active low
+IRmodule2 	= Pin(21, Pin.IN, Pin.PULL_DOWN)		#active low
 ledRed 		= PWM(Pin(28))
 ledRed.freq(1000)
 ledBlue 	= PWM(Pin(27))
@@ -81,7 +94,10 @@ gate1servo.freq(50)
 gate2servo.freq(50)
 gate3servo.freq(50)
 
-#I2C LCD
+# Create a button input on pin X
+#button = machine.Pin(X, machine.Pin.IN, machine.Pin.PULL_UP)
+
+#I2C, LCD
 i2c = I2C(1, sda=Pin(14), scl=Pin(15), freq=400000) #I2C pins 14 &15
 I2C_ADDR = i2c.scan()[0]
 lcd = I2cLcd(i2c, I2C_ADDR, 2, 16) #LCD
@@ -107,7 +123,6 @@ def readtimings():
     hsdata_int = int(hsdata.replace(':',''))
     print("ltdata_int is " + str(ltdata_int) + ", hsdata_int is " + str(hsdata_int))
     
-#functions for setting LED color
 def ledr(val):
     brightness = int(65536*val)
     ledRed.duty_u16(brightness)
@@ -144,25 +159,25 @@ def rgbBlack():
     ledr(0)
     ledb(0)
     ledg(0)
-#random LED color
+
 def rgbRand():
     ledr(random.random())
     ledb(random.random())
     ledg(random.random())
-#random angle for servos
+    
 def randangle():
     global MIN
     global MAX
     i = int(MIN + (MAX - MIN) * random.random())
-    print("randangle = " + str(i))
+    #print("randangle = " + str(i))
     return i
-#landing screen thread
+   
 def lcdfrontpageThread():
     global resetflag
     slptime = 2
     i = 0
     while lcdfp_running:
-        lcd.clear() #clearing and setting I2C LCD display
+        lcd.clear()
         lcd.putstr("LapTime=  "+str(ltdata)+"\n")
         lcd.putstr("HighScore=" + str(hsdata))
         rgbRand()
@@ -173,7 +188,6 @@ def lcdfrontpageThread():
         rgbRand()
         sleep(slptime)
         i+=1
-        #hold red button to reset
         if (stopbutton.value() == 0):
             if (resetflag == True):
                 stopbreset.init(period=10000, mode=machine.Timer.ONE_SHOT, callback=resethscallback)
@@ -192,14 +206,21 @@ def lcdfrontpageThread():
     print("closing thread")
     gc.collect()
     _thread.exit()
-#timer for LCD display and setting random angle on servos
+    
 def rand3servostimerThread():
     print("target board thread running")
     gc.collect()
-    sleeptime = 3
+    sleeptime = 2.5
     stopwatcht.init(period=1000, mode=machine.Timer.PERIODIC, callback=StpWatchIncrement)
     global servo1run, servo2run, servo3run, ltdata_int, hsdata_int, s1, s10, m1, m10
     while Stopwatch_running:
+        print("stopwatch running")
+        if servo1run:
+            servo1.duty_ns(randangle())
+        if servo2run:
+            servo2.duty_ns(randangle())
+        if servo3run:
+            servo3.duty_ns(randangle())
         if s1 > 9:
             s10 += (s1 // 10)
             s1 %= 10
@@ -214,16 +235,14 @@ def rand3servostimerThread():
             s10 %= 6
         lcd.clear()
         lcd.putstr("timing = {}{}:{}{}".format(m10, m1, s10, s1))
+        
         sleep(sleeptime)
-        #servo angles
-        if servo1run:
-            servo1.duty_ns(randangle())
-        if servo2run:
-            servo2.duty_ns(randangle())
-        if servo3run:
-            servo3.duty_ns(randangle())
-        else: pass
+        
+        if (Stopwatch_running == False):
+            break
+
     #once Stopwatch_running == False
+    print("stopwatch_running false")
     if s1 > 9:
         s10 += (s1 // 10)
         s1 %= 10
@@ -246,7 +265,6 @@ def rand3servostimerThread():
         hs = open("hs.txt", "w")
         hs.write("{}{}:{}{}".format(m10, m1, s10, s1))
         hs.close()
-    #closing thread
     stopwatcht.deinit()
     gc.collect()
     _thread.exit()
@@ -254,7 +272,7 @@ def rand3servostimerThread():
 def StpWatchIncrement(self): 
     global s1
     s1 += 1
-#resetting highscore
+
 def resethscallback(self):
     global resetflag
     print("reset callback running")
@@ -269,90 +287,73 @@ def resethscallback(self):
     else:
         print("reset unsuccessful")
     resetflag = True
-#reenabling servos
-def servo1onCallback(self):
-    gate1servo.duty_ns(MIN)
-    global servo1run, flag1
-    servo1run = True
-    flag1 = True
-    servo1on.deinit()
     
-def servo2onCallback(self):
-    gate2servo.duty_ns(MIN)
-    global servo2run, flag2
-    servo2run = True
-    flag2 = True
-    servo2on.deinit()
-    
-def servo3onCallback(self):
-    gate3servo.duty_ns(MIN)
-    global servo3run, flag3
-    servo3run = True
-    flag3 = True
-    servo3on.deinit()
-#stop conveyor
 def cbeltCallback(self):
     global motordriverCW, motordriverCCW
     motordriverCW.value(0)
     motordriverCCW.value(0)
-#interrupts for 
-def tgt_irq1(pin):
-    global servo1run, flag1
-    if not servo1run:
-        return
-    servo1run = False
-    flag1 = False
 
-def tgt_irq2(pin):
-    global servo2run, flag2
-    if not servo2run:
-        return
-    servo2run = False
-    flag2 = False
-
-def tgt_irq3(pin):
-    global servo3run, flag3
-    if not servo3run:
-        return
-    servo3run = False
-    flag3 = False
+def tgt1Callback(self):
+    global tflag1, gate1servo
+    tflag1 = True
+    gate1servo.duty_ns(MIN)
+    print("gate 1 closed")
+    
+def tgt2Callback(self):
+    global tflag2, gate2servo
+    tflag2 = True
+    gate2servo.duty_ns(MIN)
+    print("gate 2 closed")
+    
+def tgt3Callback(self):
+    global tflag3, gate3servo
+    tflag3 = True
+    gate3servo.duty_ns(MIN)
+    print("gate 3 closed")
     
 def IRmodule1_irq(pin):
-    global motordriverCW, motordriverCCW, IRflag1, start3thread
-    motordriverCW.value(0)
-    motordriverCCW.value(0)
-    print("motor stopped")
-    flag3 = True
-    start3thread = True
-    print("start3thread = true" )
+    global motordriverCW, motordriverCCW, IRflag1, start3thread, Stopwatch_running
+    if (start3thread == False): 
+        motordriverCW.value(0)
+        motordriverCCW.value(0)
+        print("motor stopped")
+        flag3 = True
+        start3thread = True
+        Stopwatch_running = True
+        print("start3thread = true" )
     
 #display stats on screen
 readtimings()
-
-#LED red
-rgbRed()
+gate1 = 0
+gate2 = 0
+gate3 = 0
 
 while True:
-    Stopwatch_running = True
+    #LED red
+    rgbRed()
+    gate1servo.duty_ns(MIN)
+    gate2servo.duty_ns(MIN)
+    gate3servo.duty_ns(MIN)
+
+    Stopwatch_running = False
     lcdfp_running = True
     lcd.clear()
     lcd.putstr("welcome")
-    for i in range(1):
-        servo1.duty_ns(MAX)
-        servo2.duty_ns(MAX)
-        servo3.duty_ns(MAX)
-        gate1servo.duty_ns(MAX)
-        gate2servo.duty_ns(MAX)
-        gate3servo.duty_ns(MAX)
-        sleep(2)
-        servo1.duty_ns(MIN)
-        servo2.duty_ns(MIN)
-        servo3.duty_ns(MIN)
-        gate1servo.duty_ns(MIN)
-        gate2servo.duty_ns(gMIN)
-        gate3servo.duty_ns(MIN)
-        print("min")
-        sleep(2)
+    servo1.duty_ns(MAX)
+    servo2.duty_ns(MAX)
+    servo3.duty_ns(MAX)
+    gate1servo.duty_ns(MAX)
+    gate2servo.duty_ns(MAX)
+    gate3servo.duty_ns(MAX)
+    sleep(2)
+    servo1.duty_ns(MIN)
+    servo2.duty_ns(MIN)
+    servo3.duty_ns(MIN)
+    gate1servo.duty_ns(MIN)
+    gate2servo.duty_ns(gMIN)
+    gate3servo.duty_ns(MIN)
+    print("min")
+    sleep(2)
     motordriverCW.value(0)
     motordriverCCW.value(0)
     if (lswitch1.value() == 1): #switch false
@@ -365,89 +366,64 @@ while True:
                 motordriverCW.value(0)
                 break
     motordriverCW.value(0)
+
     print("starting landing screen")
     _thread.start_new_thread(lcdfrontpageThread, ()) #landing screen
     while startbutton.value():
         pass
     #once button pressed
     print("startbutton pressed")
-    
+
     print("startbutton value is " + str(startbutton.value()))
     lcdfp_running = False
     sleep(3)
-    
+
     #ConveyorBeltPosition to start
     motordriverCCW.value(1)
     print("moving belt 2")
     IRmodule1.irq(trigger=Pin.IRQ_FALLING, handler = IRmodule1_irq)
-    '''if (IRmodule1.value() == 1):
-        while (IRmodule1.value() == 1):
-            motordriverCCW.value(1)'''
-    
-    '''while (IRmodule1.value() == 1):
+    while (Stopwatch_running == False):
         pass
-        if (IRmodule1.value() == 0):
-            motordriverCCW.value(0)
-            motordriverCW.value(0)
-            break '''
-    
-    #once IRmodule1 detected, proceed
-    #cbeltTimer.init(period=10000, mode=machine.Timer.ONE_SHOT, callback=cbeltCallback)
-    #CarPosition to end
-    #lap time to 0
-    rgbRed()
-        
-    #Start game once conveyor belt is at top
-    
-    print("clearing memory")
-    gc.collect()
-    print("Free memory: ", gc.mem_free(), "bytes")
-    print("checking target board values, starting interrupts")
-    while (start3thread == False):
-        pass
-        print("start3thread = " + str(start3thread))
-        sleep(0.1)
-        if (start3thread == True):
+        if (Stopwatch_running == True):
             break
+        
+    gate1servo.duty_ns(MIN)
+    gate2servo.duty_ns(MIN)
+    gate3servo.duty_ns(MIN)
+
     _thread.start_new_thread(rand3servostimerThread, ())
-    tgtboard1.irq(trigger=Pin.IRQ_RISING, handler = tgt_irq1)
-    tgtboard2.irq(trigger=Pin.IRQ_RISING, handler = tgt_irq2)
-    tgtboard3.irq(trigger=Pin.IRQ_RISING, handler = tgt_irq3)
+    lswitch1.irq(trigger=Pin.IRQ_RISING, handler = cbeltCallback)
+    motordriverCW.value(1)
     while Stopwatch_running:
-        if servo1run == False:
-            if not flag1: 
-                print("tgt1 activated2")
-                servo1.duty_ns(MID)
+        if (tgtboard1.value() == 0):
+            if (tflag1 == True):
                 gate1servo.duty_ns(MAX)
-                servo1on.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=servo1onCallback)
-                flag1 = True
-        if servo2run == False:
-            if not flag2:
-                print("tgt2 activated2")
-                servo2.duty_ns(MID)
+                tflag1 = False
+                print("gate 1 activated")
+                gate1=1
+                tgt1.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=tgt1Callback)
+                
+        if (tgtboard2.value() == 0):
+            if (tflag2 == True):
                 gate2servo.duty_ns(MAX)
-                servo2on.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=servo2onCallback)
-                flag2 = True
-        if servo3run == False:
-            print("servo3 false")
-            if not flag3:
-                print("tgt3 activated2")
-                servo3.duty_ns(MID)
+                tflag2 = False
+                print("gate 2 activated")
+                gate2=1
+                tgt2.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=tgt2Callback)
+           
+        if (tgtboard3.value() == 0):
+            if (tflag3 == True):
                 gate3servo.duty_ns(MAX)
-                print ("servos moved")
-                servo3on.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=servo3onCallback)
-                print("timer started")
-                flag3 = True
-                print("flag set")
-        IR2val = IRmodule2.value()
-        if IR2val == False:
+                tflag3 = False
+                print("gate 3 activated")
+                gate3=1
+                tgt3.init(period=3000, mode=machine.Timer.ONE_SHOT, callback=tgt3Callback)
+        if ((gate1 == 1) and (gate2 == 1) and (gate3 == 1)):
+            sleep(3)
             Stopwatch_running = False
-            print("IRmodule2 activated")
-            #end game!
-        sleep(0.1)
-    servo1on.deinit()
-    servo2on.deinit()
-    servo3on.deinit()
+    tgt1.deinit()
+    tgt2.deinit()
+    tgt3.deinit()
     rgbWhite()
     sleep(1)
     rgbBlack()
@@ -463,3 +439,5 @@ while True:
     lcd.backlight_on()
     readtimings()
     start3thread = False
+    print("game complete")
+    sleep(3)
